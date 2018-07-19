@@ -46,7 +46,7 @@ public class MetaData
 			}
 			else
 			{
-				offsetmap.forEach((k,v) -> System.out.println("flush meta file >> " + k + ","+v[0].toString()+","+v[1].toString()));
+				//offsetmap.forEach((k,v) -> System.out.println("flush meta file >> " + k + ","+v[0].toString()+","+v[1].toString()));
 				for(Map.Entry<String, Long[]> entry : offsetmap.entrySet()) {
 				    String key = entry.getKey();
 				    Long[] value = entry.getValue();
