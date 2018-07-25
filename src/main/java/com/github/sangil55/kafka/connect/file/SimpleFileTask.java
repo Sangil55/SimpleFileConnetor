@@ -37,6 +37,7 @@ public class SimpleFileTask extends SourceTask {
 	 private String pathname="/data01/m_input";
 	 private int BUFFER_SIZE = 100000;
 	 private String offsetpath="/tmp/";
+	 private int SLEEP_TIME = 0;
 	 String offsetFileName = "kafka_csi_offset.csv";
 	 
 	  private InputStream stream;
@@ -54,8 +55,13 @@ public class SimpleFileTask extends SourceTask {
 	    	BUFFER_SIZE = Integer.parseInt(props.get(SimpleFileConnector.BUFFERSIZE_CONFIG));
 	    if(props.get(SimpleFileConnector.OFFSETPATH_CONFIG) != null)
 	    	offsetpath = justGetOrAddSlash(props.get(SimpleFileConnector.OFFSETPATH_CONFIG));
-	    log.info("[INFO] Kafka Connector Task start ");
-	    log.info("[INFO] Kafka Connector start Option > file path = " + pathname + ",topic = " + topic + ",buffersize = " + BUFFER_SIZE + ",offsetpath = " + offsetpath);
+	    if(props.get(SimpleFileConnector.SLEEPTIME_CONFIG) != null)
+	    	SLEEP_TIME = Integer.parseInt(props.get(SimpleFileConnector.SLEEPTIME_CONFIG));
+	   // pathname = "d:/getter/input.vol1";
+    
+	    log.info(">Kafka Connector Task start ");
+	    log.info(">>Kafka Connector start Option > file path = " + pathname + ",topic = " + topic + ",buffersize = " + BUFFER_SIZE);
+	    log.info(">>Kafka Connector start Option > offsetpath = " + offsetpath + ",SLEEP TIME = " + SLEEP_TIME);
 	    
 	    metadata = new MetaData();	
 	  }
@@ -137,7 +143,7 @@ public class SimpleFileTask extends SourceTask {
 	public List<SourceRecord> poll() throws InterruptedException {
 		synchronized (this)
 			{
-			Thread.sleep(5000);	
+			Thread.sleep(1000);	
 		
 			// TODO Auto-generated method stub
 			//log.info("polling-csi");
@@ -272,7 +278,7 @@ public class SimpleFileTask extends SourceTask {
 							ll[0] = offset; ll[1] = filelen;						
 							metadata.offsetmap.put(fileList[i].getName(), ll);
 							
-							metadata.saveoffset("/tmp/");
+							metadata.saveoffset(offsetpath);
 							return results;
 							      
 						} catch (FileNotFoundException e) {
