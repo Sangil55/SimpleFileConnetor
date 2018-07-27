@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -22,6 +23,14 @@ public class MetaData
 	String offsetFileName = "kafka_csi_offset.csv";
 	String offsetPath = "/tmp/";
 	String fullname ="/tmp/kafka_csi_offset.csv";
+	int total_file_count = 0;
+	int pos=0;
+	
+	public MetaData(String path)
+	{
+		offsetPath = path;
+	}
+	
 	public void saveoffset(String strpath) throws IOException
 	{
 		int retrycnt = 0;
@@ -110,6 +119,39 @@ public class MetaData
 	 {
 		 fullname = offsetPath + offsetFileName;
 		 return fullname;
+	 }
+	 
+	 public void putData(String key, long value1, long value2)
+	 {
+		Long[] l = new Long[2];
+     	l[0] = value1;
+     	l[1] = value2;
+     	offsetmap.put(key, l);
+	 }	 
+	 public void refresh(String strPath)
+	 {
+	    File dirFile=new File(strPath);
+		File []fileList=dirFile.listFiles();
+		Arrays.sort(fileList);
+		int i;
+		int count=0;
+		for(i=0;i<fileList.length;i++)
+		{
+			if( fileList[i].isFile() )
+				count++;
+		}
+		if(count != total_file_count)
+			total_file_count = count;
+		
+		if(offsetmap.get(fileList[pos].getName())[1] != fileList[pos].length())
+			putData(fileList[i].getName(),0,fileList[i].length());
+		for(i=pos+1; i<fileList.length; i++)
+		{
+			//if file le
+			if(offsetmap.get(fileList[i].getName())[1] != fileList[i].length())
+				putData(fileList[i].getName(),0,fileList[i].length());
+		}
+		
 	 }
 	 
 }

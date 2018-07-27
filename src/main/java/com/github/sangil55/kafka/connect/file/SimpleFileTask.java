@@ -8,11 +8,14 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import javax.tools.JavaFileObject;
 
@@ -38,6 +41,7 @@ public class SimpleFileTask extends SourceTask {
 	 private int BUFFER_SIZE = 100000;
 	 private String offsetpath="/tmp/";
 	 private int SLEEP_TIME = 0;
+	 private int START_POS =0;
 	 String offsetFileName = "kafka_csi_offset.csv";
 	 
 	  private InputStream stream;
@@ -63,7 +67,7 @@ public class SimpleFileTask extends SourceTask {
 	    log.info(">>Kafka Connector start Option > file path = " + pathname + ",topic = " + topic + ",buffersize = " + BUFFER_SIZE);
 	    log.info(">>Kafka Connector start Option > offsetpath = " + offsetpath + ",SLEEP TIME = " + SLEEP_TIME);
 	    
-	    metadata = new MetaData();	
+	    metadata = new MetaData(offsetpath);	
 	  }
 	  
 	
@@ -138,12 +142,28 @@ public class SimpleFileTask extends SourceTask {
 		 }		 
 		 
 	 }
+	 
+	 public String getDate(String str)
+	 {	
+		 //MAS04_20180726_005638.log
+		 String patternStr = "\\d{8}";
+		 //if(str.split(regex))
+		 Pattern pattern = Pattern.compile(patternStr);
+         Matcher matcher = pattern.matcher(str);
+
+         int count = 0;
+         while (matcher.find()) {
+        	 System.out.println(matcher.group());
+            return matcher.group();
+         }
+         return "";
+	 }
 
 	@Override
 	public List<SourceRecord> poll() throws InterruptedException {
 		synchronized (this)
 			{
-			Thread.sleep(1000);	
+			Thread.sleep(SLEEP_TIME);	
 		
 			// TODO Auto-generated method stub
 			//log.info("polling-csi");
@@ -151,6 +171,8 @@ public class SimpleFileTask extends SourceTask {
 			File dirFile=new File(pathname);
 			
 			File []fileList=dirFile.listFiles();
+			Arrays.sort(fileList);
+			
 			File metafile = new File(offsetpath+offsetFileName);
 		    
 	        final List<SourceRecord> results = new ArrayList<>();
@@ -160,24 +182,30 @@ public class SimpleFileTask extends SourceTask {
 			if( metafile.exists() )
 			{
 				if(metadata == null)
-					metadata = new MetaData();	
+				{
+					metadata = new MetaData(offsetpath);
+					START_POS = 0;
+				}	
 				metadata.ReadMetaFile(offsetpath+offsetFileName);
 				//log.info("[INFO] meta file read done");
 			}
 			else
 			{
-				metadata = new MetaData();			
+				metadata = new MetaData(offsetpath);
+				START_POS=0;
+			//	metadata.refresh(pathname);
 			}
-			for(int i = 0; i<fileList.length; i++)
+			for(int i = START_POS; i<fileList.length; i++)
 			{
+				log.info("PROGRESS -- TOTAL FILE Counts :" +i + "/" + fileList.length);
 				if(fileList[i].isDirectory())
 					continue;
 				String filestr = pathname + fileList[i].getName();
 				if(metadata.offsetmap.get(fileList[i].getName()) == null)
 				{
-					log.info("FILE REAED START WITH : " + pathname + fileList[i].getName() + "  TOTAL FILE Counts :" +i + "/" + fileList.length);
+				//	log.info("FILE REAED START WITH : " + pathname + fileList[i].getName() + "  TOTAL FILE Counts :" +i + "/" + fileList.length);
 					
-					log.info("------------------------------------------------no offset data read start");
+				//	log.info("------------------------------------------------no offset data read start");
 					// new metadata should be created
 					long filelen = fileList[i].length();					
 					long offset = 0;
@@ -195,6 +223,8 @@ public class SimpleFileTask extends SourceTask {
 						byte[] b = new byte[NEW_BUFFER_SIZE];
 						if ((s = cin.read(b, 0, NEW_BUFFER_SIZE)) != -1) {
 							String newstr = new String(b, "UTF-8");
+							String header = "<<HEADER>>date="+ getDate(fileList[i].getName()) + ",<</HEADER>>\n";
+							
 					        log.info("num of data bytes : " + s + "   ||  data : " /*+newstr*/);
 					        Map sourcePartition = Collections.singletonMap("filename", filestr);
 					        offset += s;
@@ -203,11 +233,11 @@ public class SimpleFileTask extends SourceTask {
 					        	log.info("Error case 'NULL+NEWLINE' at first");
 					        	if(newstr.length()>2)
 					        		newstr.substring(2);
-					        }					        
+					        }			
 					        	
 					        
 					        Map sourceOffset = Collections.singletonMap("position", offset);
-					        results.add(new SourceRecord(sourcePartition, sourceOffset, topic, Schema.STRING_SCHEMA, newstr));						      
+					        results.add(new SourceRecord(sourcePartition, sourceOffset, topic, Schema.STRING_SCHEMA, header+ newstr));						      
 						 }
 						Long[]ll = new Long[2];
 						ll[0] = offset; ll[1] = filelen;						
@@ -239,11 +269,14 @@ public class SimpleFileTask extends SourceTask {
 				{
 					if(isFinished(filestr) == true)
 					{
-						continue;						
+					//	log.info("FILE has done " + filestr);
+						START_POS = i;
+						continue;
+						//to avoid reading already done file;						
 					}
 					else
 					{
-						log.info("FILE REAED START WITH : " + pathname + fileList[i].getName() + "  TOTAL FILE Counts :" +i + "/" + fileList.length);
+					//	log.info("FILE REAED START WITH : " + pathname + fileList[i].getName() + "  TOTAL FILE Counts :" +i + "/" + fileList.length);
 						
 						// start to read by 1000 rows
 						
@@ -255,7 +288,7 @@ public class SimpleFileTask extends SourceTask {
 							offset = 0;
 						else
 							offset = metadata.offsetmap.get(fileList[i].getName())[0];
-						log.info("--------------------------------not finished with offset, Read start : " + offset + "/" + filelen);
+				//		log.info("--------------------------------not finished with offset, Read start : " + offset + "/" + filelen);
 						try {
 							cin = new CountingInputStream(new FileInputStream(filestr));
 							ctemp = new CountingInputStream(new FileInputStream(filestr));
@@ -267,12 +300,13 @@ public class SimpleFileTask extends SourceTask {
 							cin.skip(offset);
 							if ((s = cin.read(b, 0, NEW_BUFFER_SIZE)) != -1) {
 								String newstr = new String(b, "UTF-8");
-						        log.info("num of data bytes : " + s + "   ||  data : "/* +newstr */);
+								String header = "<<Header>>date="+ getDate(fileList[i].getName()) + "<</HEADER>>\n";
+						        //log.info("num of data bytes : " + s + "   ||  data : "/* +newstr */);
 						        Map sourcePartition = Collections.singletonMap("filename", filestr);
 						        offset += s;
 						        
 						        Map sourceOffset = Collections.singletonMap("position", offset);
-						        results.add(new SourceRecord(sourcePartition, sourceOffset, topic, Schema.STRING_SCHEMA, newstr));						      
+						        results.add(new SourceRecord(sourcePartition, sourceOffset, topic, Schema.STRING_SCHEMA, header+newstr));						      
 							 }
 							Long[]ll = new Long[2];
 							ll[0] = offset; ll[1] = filelen;						
