@@ -182,17 +182,13 @@ public class SimpleFileTask extends SourceTask {
 			if( metafile.exists() )
 			{
 				if(metadata == null)
-				{
-					metadata = new MetaData(offsetpath);
-					START_POS = 0;
-				}	
+					metadata = new MetaData(offsetpath);	
 				metadata.ReadMetaFile(offsetpath+offsetFileName);
 				//log.info("[INFO] meta file read done");
 			}
 			else
 			{
 				metadata = new MetaData(offsetpath);
-				START_POS=0;
 			//	metadata.refresh(pathname);
 			}
 			for(int i = START_POS; i<fileList.length; i++)
@@ -301,7 +297,7 @@ public class SimpleFileTask extends SourceTask {
 							if ((s = cin.read(b, 0, NEW_BUFFER_SIZE)) != -1) {
 								String newstr = new String(b, "UTF-8");
 								String header = "<<Header>>date="+ getDate(fileList[i].getName()) + "<</HEADER>>\n";
-						        //log.info("num of data bytes : " + s + "   ||  data : "/* +newstr */);
+						        log.info("num of data bytes : " + s + "   ||  data : "/* +newstr */);
 						        Map sourcePartition = Collections.singletonMap("filename", filestr);
 						        offset += s;
 						        
