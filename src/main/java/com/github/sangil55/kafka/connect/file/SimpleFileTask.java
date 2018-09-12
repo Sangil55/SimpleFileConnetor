@@ -7,10 +7,13 @@ import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -35,11 +38,12 @@ public class SimpleFileTask extends SourceTask {
 		return "1.0";
 	}
 
-	
+	 private String connectorname="";
 	 private String filename;
 	 private String pathname="/data01/m_input";
 	 private int BUFFER_SIZE = 100000;
 	 private String offsetpath="/tmp/";
+	 private String matchstr="*";
 	 private int SLEEP_TIME = 0;
 	 private int START_POS =0;
 	 String offsetFileName = "kafka_csi_offset.csv";
@@ -50,6 +54,7 @@ public class SimpleFileTask extends SourceTask {
 	  private long lasttime = 0;
 	  private final Object syncObj1 = new Object();
 	  public void start(Map<String, String> props) {
+		connectorname = props.get(SimpleFileConnector.CONNECTOR_CONFIG);
 	    filename = justGetOrAddSlash(props.get(SimpleFileConnector.FILE_CONFIG));
 	    pathname = justGetOrAddSlash(props.get(SimpleFileConnector.FILE_CONFIG));
 	    //default filename = pathname > spool all file in the just right directory
@@ -153,7 +158,7 @@ public class SimpleFileTask extends SourceTask {
 
          int count = 0;
          while (matcher.find()) {
-        	 System.out.println(matcher.group());
+        	 //System.out.println(matcher.group());
             return matcher.group();
          }
          return "";
@@ -167,18 +172,44 @@ public class SimpleFileTask extends SourceTask {
 		
 			// TODO Auto-generated method stub
 			//log.info("polling-csi");
+			String realpathname = pathname;
+			File dirFile=new File(realpathname);			
+			matchstr = ".*";
+			if(!dirFile.isDirectory())
+			{
+				String [] strlist =  pathname.split("/");
+				if(strlist.length!=0)
+					matchstr = strlist[strlist.length-1];
+				realpathname = realpathname.replace(matchstr+"/","");
+				//dirFile=new File(realpathname);
+				
+			//	System.out.println(matchstr + "\n"+ realpathname);
+			}
 			
-			File dirFile=new File(pathname);
 			
-			File []fileList=dirFile.listFiles();
+			File []fileList=new File(realpathname).listFiles();
+			
+			if( fileList ==null || fileList.length==0)
+				return null;
 			Arrays.sort(fileList);
 			
+			ArrayList<File> MatchedFileList= new ArrayList<>();  
+			//File []machted_FileList =new ;
+			for(int i=0;i<fileList.length;i++)
+			{
+				
+			//	System.out.println(fileList[i].getName() + " " +fileList[i].getName().matches(matchstr));
+				if(fileList[i].getName().matches(matchstr))
+				{
+					MatchedFileList.add(fileList[i]);
+				//	System.out.println("File added : " + fileList[i]);
+				}
+			}			
+			
+			
 			File metafile = new File(offsetpath+offsetFileName);
-		    
-	        final List<SourceRecord> results = new ArrayList<>();
+		    final List<SourceRecord> results = new ArrayList<>();
 	
-			if(fileList==null)
-				return null;
 			if( metafile.exists() )
 			{
 				if(metadata == null)
@@ -191,19 +222,43 @@ public class SimpleFileTask extends SourceTask {
 				metadata = new MetaData(offsetpath);
 			//	metadata.refresh(pathname);
 			}
-			for(int i = START_POS; i<fileList.length; i++)
+					
+		//	System.out.println("metadata.size : " + metadata.offsetmap.size() + "MatchedFileList.size() : " + MatchedFileList.size());
+			if(metadata.offsetmap.size() > MatchedFileList.size() + 10)
 			{
-				log.info("PROGRESS -- TOTAL FILE Counts :" +i + "/" + fileList.length);
-				if(fileList[i].isDirectory())
+				// delete old (completed) offset data if list size goes up
+				// should be with update timer?
+				metadata.offsetmap = UpdateOffsetMap(MatchedFileList);
+				try {
+					metadata.saveoffset(offsetpath);
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+				START_POS = 0;
+			}
+			
+			
+			for(int i = START_POS; i<MatchedFileList.size(); i++)
+			{
+				log.info("PROGRESS -- TOTAL FILE Counts :" +i + "/" + MatchedFileList.size());
+				File thisfile = MatchedFileList.get(i);
+				if(thisfile.isDirectory())
 					continue;
-				String filestr = pathname + fileList[i].getName();
-				if(metadata.offsetmap.get(fileList[i].getName()) == null)
+				if(!thisfile.getName().matches(matchstr))
+				{
+					//System.out.println("not matching!!");
+					continue;
+				}
+					
+				String filestr = realpathname + thisfile.getName();
+				if(metadata.offsetmap.get(thisfile.getName()) == null)
 				{
 				//	log.info("FILE REAED START WITH : " + pathname + fileList[i].getName() + "  TOTAL FILE Counts :" +i + "/" + fileList.length);
 					
 				//	log.info("------------------------------------------------no offset data read start");
 					// new metadata should be created
-					long filelen = fileList[i].length();					
+					long filelen = thisfile.length();					
 					long offset = 0;
 					CountingInputStream cin = null;
 					CountingInputStream ctemp = null;
@@ -219,21 +274,22 @@ public class SimpleFileTask extends SourceTask {
 						byte[] b = new byte[NEW_BUFFER_SIZE];
 						if ((s = cin.read(b, 0, NEW_BUFFER_SIZE)) != -1) {
 							String newstr = new String(b, "UTF-8");
-							String header = "<<HEADER>>date="+ getDate(fileList[i].getName()) + ",<</HEADER>>\n";
-							
+							String header = "<<HEADER>>date="+ getDate(thisfile.getName()) + "<</HEADER>>\n";
+													
 					        log.info("num of data bytes : " + s + "   ||  data : " /*+newstr*/);
-					        Map sourcePartition = Collections.singletonMap("filename", filestr);
+					       
 					        offset += s;
 					        if(newstr.charAt(0) == '\0' && newstr.charAt(1) == '\n')
 					        {
 					        	log.info("Error case 'NULL+NEWLINE' at first");
 					        	if(newstr.length()>2)
 					        		newstr.substring(2);
-					        }			
-					        	
-					        
+					        }								        	
+					    
 					        Map sourceOffset = Collections.singletonMap("position", offset);
-					        results.add(new SourceRecord(sourcePartition, sourceOffset, topic, Schema.STRING_SCHEMA, header+ newstr));						      
+					        Map sourcePartition = Collections.singletonMap("filename", filestr);
+					        String key = connectorname + String.valueOf(i);					        
+					        results.add(new SourceRecord(sourcePartition, sourceOffset, topic,Schema.STRING_SCHEMA,key ,Schema.STRING_SCHEMA,  header + newstr));						      
 						 }
 						Long[]ll = new Long[2];
 						ll[0] = offset; ll[1] = filelen;						
@@ -298,11 +354,15 @@ public class SimpleFileTask extends SourceTask {
 								String newstr = new String(b, "UTF-8");
 								String header = "<<Header>>date="+ getDate(fileList[i].getName()) + "<</HEADER>>\n";
 						        log.info("num of data bytes : " + s + "   ||  data : "/* +newstr */);
-						        Map sourcePartition = Collections.singletonMap("filename", filestr);
 						        offset += s;
-						        
+			        
+						        Map sourcePartition = Collections.singletonMap("filename", filestr);
 						        Map sourceOffset = Collections.singletonMap("position", offset);
-						        results.add(new SourceRecord(sourcePartition, sourceOffset, topic, Schema.STRING_SCHEMA, header+newstr));						      
+						        String key = connectorname+ String.valueOf(i);
+						        //String key = String.valueOf(i);
+						        results.add(new SourceRecord(sourcePartition, sourceOffset, topic,Schema.STRING_SCHEMA,key ,Schema.STRING_SCHEMA,  header + newstr));
+						        
+						        //results.add(new SourceRecord(sourcePartition, sourceOffset, topic, Schema.STRING_SCHEMA, header+newstr));
 							 }
 							Long[]ll = new Long[2];
 							ll[0] = offset; ll[1] = filelen;						
@@ -340,6 +400,26 @@ public class SimpleFileTask extends SourceTask {
 	public void stop() {
 		// TODO Auto-generated method stub
 
-	}	
-
+	}
+	
+	private Map<String, Long[]> UpdateOffsetMap(ArrayList<File> list)
+	{
+		Map<String, Long[]> newoffsetmap = new HashMap<>();
+		int i;
+		for(i=0;i<list.size();i++)
+		{
+			File file = list.get(i);
+			String filestr = list.get(i).getName();
+			Long [] offsetdata = metadata.offsetmap.get(filestr);
+			if(offsetdata == null)
+			{
+				offsetdata = new Long[2];
+				offsetdata[0] = 0L;
+				offsetdata[1] = file.length();
+			}
+			newoffsetmap.put(filestr, offsetdata);
+		}
+		return newoffsetmap;
+	}
 }
+

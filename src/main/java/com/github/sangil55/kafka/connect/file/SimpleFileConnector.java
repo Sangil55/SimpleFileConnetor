@@ -17,6 +17,8 @@ public class SimpleFileConnector  extends SourceConnector {
     public static final String OFFSETPATH_CONFIG = "offsetpath";
     public static final String BUFFERSIZE_CONFIG = "buffer.size";
     public static final String SLEEPTIME_CONFIG = "sleep.ms";
+    public static final String CONNECTOR_CONFIG = "connector.key";
+    private String connectorname;
 	private String filename;
 	private String topic;
 	private long BUFFER_SIZE = 10000;
@@ -28,7 +30,8 @@ public class SimpleFileConnector  extends SourceConnector {
       .define(TOPIC_CONFIG, Type.STRING, Importance.HIGH, "The topic to publish data to")
 	  .define(OFFSETPATH_CONFIG, Type.STRING, null, Importance.HIGH, "OFFSETFILE set default to /tmp/simplefileconnecor/")
       .define(BUFFERSIZE_CONFIG, Type.STRING, Importance.HIGH, "File Stream buffersize by polling")
-	  .define(SLEEPTIME_CONFIG, Type.STRING, Importance.HIGH, "Thread sleep time");
+	  .define(SLEEPTIME_CONFIG, Type.STRING, Importance.HIGH, "Thread sleep time")
+	  .define(CONNECTOR_CONFIG, Type.STRING, Importance.HIGH, "Connector Key for Partiton");
 	@Override
 	public String version() {
 		// TODO Auto-generated method stub
@@ -40,6 +43,7 @@ public class SimpleFileConnector  extends SourceConnector {
 		// TODO Auto-generated method stub
 		  filename = props.get(FILE_CONFIG);
 		  topic = props.get(TOPIC_CONFIG);
+		  connectorname = props.get(CONNECTOR_CONFIG);
 		  offsetpath = props.get(OFFSETPATH_CONFIG);
 		  if(props.get(BUFFERSIZE_CONFIG)!= null)
 			  BUFFER_SIZE = Long.parseLong(props.get(BUFFERSIZE_CONFIG));
@@ -66,7 +70,8 @@ public class SimpleFileConnector  extends SourceConnector {
 		  if (offsetpath != null)
 			    config.put(OFFSETPATH_CONFIG, offsetpath);
 		  //if (BUFFER_SIZE != null)
-			    config.put(BUFFERSIZE_CONFIG, String.valueOf(BUFFER_SIZE));
+		  config.put(CONNECTOR_CONFIG, connectorname);
+		  config.put(BUFFERSIZE_CONFIG, String.valueOf(BUFFER_SIZE));
 		  config.put(SLEEPTIME_CONFIG, String.valueOf(SLEEP_TIME));
 		  configs.add(config);
 		  return configs;
