@@ -239,9 +239,9 @@ public class SimpleFileTask extends SourceTask {
 			}
 			
 			
-			for(int i = START_POS; i<MatchedFileList.size(); i++)
+			for(int i = 0; i<MatchedFileList.size(); i++)
 			{
-				log.info("PROGRESS -- TOTAL FILE Counts :" +i + "/" + MatchedFileList.size());
+				//log.info("PROGRESS -- TOTAL FILE Counts :" +i+1 + "/" + MatchedFileList.size());
 				File thisfile = MatchedFileList.get(i);
 				if(thisfile.isDirectory())
 					continue;
@@ -254,6 +254,7 @@ public class SimpleFileTask extends SourceTask {
 				String filestr = realpathname + thisfile.getName();
 				if(metadata.offsetmap.get(thisfile.getName()) == null)
 				{
+					log.info("PROGRESS -- TOTAL FILE Counts :" +(i+1) + "/" + MatchedFileList.size());
 				//	log.info("FILE REAED START WITH : " + pathname + fileList[i].getName() + "  TOTAL FILE Counts :" +i + "/" + fileList.length);
 					
 				//	log.info("------------------------------------------------no offset data read start");
@@ -328,6 +329,7 @@ public class SimpleFileTask extends SourceTask {
 					}
 					else
 					{
+						log.info("PROGRESS -- TOTAL FILE Counts :" +(i+1) + "/" + MatchedFileList.size());
 					//	log.info("FILE REAED START WITH : " + pathname + fileList[i].getName() + "  TOTAL FILE Counts :" +i + "/" + fileList.length);
 						
 						// start to read by 1000 rows
