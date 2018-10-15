@@ -38,7 +38,7 @@ public class SimpleFileTask extends SourceTask {
 		return "1.0";
 	}
 
-	 private String connectorname="";
+	 private String connectorkeyname="";
 	 private String filename;
 	 private String pathname="/data01/m_input";
 	 private int BUFFER_SIZE = 100000;
@@ -54,7 +54,7 @@ public class SimpleFileTask extends SourceTask {
 	  private long lasttime = 0;
 	  private final Object syncObj1 = new Object();
 	  public void start(Map<String, String> props) {
-		connectorname = props.get(SimpleFileConnector.CONNECTOR_CONFIG);
+		  connectorkeyname = props.get(SimpleFileConnector.CONNECTORKEY_CONFIG);
 	    filename = justGetOrAddSlash(props.get(SimpleFileConnector.FILE_CONFIG));
 	    pathname = justGetOrAddSlash(props.get(SimpleFileConnector.FILE_CONFIG));
 	    //default filename = pathname > spool all file in the just right directory
@@ -289,7 +289,11 @@ public class SimpleFileTask extends SourceTask {
 					    
 					        Map sourceOffset = Collections.singletonMap("position", offset);
 					        Map sourcePartition = Collections.singletonMap("filename", filestr);
-					        String key = connectorname + String.valueOf(i);					        
+					        String key = "";
+					        if(connectorkeyname.equals("FILE") || connectorkeyname.equals("file"))
+					        	 key = String.valueOf(i);
+					        else
+					        	key = connectorkeyname;
 					        results.add(new SourceRecord(sourcePartition, sourceOffset, topic,Schema.STRING_SCHEMA,key ,Schema.STRING_SCHEMA,  header + newstr));						      
 						 }
 						Long[]ll = new Long[2];
@@ -360,11 +364,13 @@ public class SimpleFileTask extends SourceTask {
 			        
 						        Map sourcePartition = Collections.singletonMap("filename", filestr);
 						        Map sourceOffset = Collections.singletonMap("position", offset);
-						        String key = connectorname+ String.valueOf(i);
-						        //String key = String.valueOf(i);
-						        results.add(new SourceRecord(sourcePartition, sourceOffset, topic,Schema.STRING_SCHEMA,key ,Schema.STRING_SCHEMA,  header + newstr));
 						        
-						        //results.add(new SourceRecord(sourcePartition, sourceOffset, topic, Schema.STRING_SCHEMA, header+newstr));
+						        String key = "";
+						        if(connectorkeyname.equals("FILE") || connectorkeyname.equals("file"))
+						        	key = String.valueOf(i);
+						        else
+						        	key = connectorkeyname;
+						        results.add(new SourceRecord(sourcePartition, sourceOffset, topic,Schema.STRING_SCHEMA,key ,Schema.STRING_SCHEMA,  header + newstr));
 							 }
 							Long[]ll = new Long[2];
 							ll[0] = offset; ll[1] = filelen;						
