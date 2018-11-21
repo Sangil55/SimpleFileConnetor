@@ -18,20 +18,23 @@ public class SimpleFileConnector  extends SourceConnector {
     public static final String BUFFERSIZE_CONFIG = "buffer.size";
     public static final String SLEEPTIME_CONFIG = "sleep.ms";
     public static final String CONNECTORKEY_CONFIG = "connector.key";
+    public static final String SELECTDATE_CONFIG = "selectdate";
     private String connectorkeyname;
 	private String filename;
 	private String topic;
 	private long BUFFER_SIZE = 10000;
     private String offsetpath="/tmp/";
     private int SLEEP_TIME = 0;
-	 
+    private String daterule="file";
+    
 	  private static final ConfigDef CONFIG_DEF = new ConfigDef()
       .define(FILE_CONFIG, Type.STRING, null, Importance.HIGH, "Source pathname. If not specified, the standard input will be used")
       .define(TOPIC_CONFIG, Type.STRING, Importance.HIGH, "The topic to publish data to")
 	  .define(OFFSETPATH_CONFIG, Type.STRING, null, Importance.HIGH, "OFFSETFILE set default to /tmp/simplefileconnecor/")
       .define(BUFFERSIZE_CONFIG, Type.STRING, Importance.HIGH, "File Stream buffersize by polling")
 	  .define(SLEEPTIME_CONFIG, Type.STRING, Importance.HIGH, "Thread sleep time")
-	  .define(CONNECTORKEY_CONFIG, Type.STRING, Importance.HIGH, "Connector Key for Partiton, if key == \"FILE\" it will divide file to serveral partitons ");
+	  .define(CONNECTORKEY_CONFIG, Type.STRING, Importance.HIGH, "Connector Key for Partiton, if key == \"FILE\" it will divide file to serveral partitons ")
+	  .define(SELECTDATE_CONFIG, Type.STRING, Importance.LOW, "How to select date, [local] local time vs [file] File name parsing");
 	@Override
 	public String version() {
 		// TODO Auto-generated method stub
@@ -49,6 +52,8 @@ public class SimpleFileConnector  extends SourceConnector {
 			  BUFFER_SIZE = Long.parseLong(props.get(BUFFERSIZE_CONFIG));
 		  if(props.get(SLEEPTIME_CONFIG) != null)
 			  SLEEP_TIME = Integer.parseInt(props.get(SLEEPTIME_CONFIG));  
+		  if(props.get(SELECTDATE_CONFIG) != null)
+			  daterule = props.get(SELECTDATE_CONFIG); 
 	}
 
 	@Override
@@ -73,6 +78,8 @@ public class SimpleFileConnector  extends SourceConnector {
 		  config.put(CONNECTORKEY_CONFIG, connectorkeyname);
 		  config.put(BUFFERSIZE_CONFIG, String.valueOf(BUFFER_SIZE));
 		  config.put(SLEEPTIME_CONFIG, String.valueOf(SLEEP_TIME));
+		  config.put(SELECTDATE_CONFIG, daterule);
+		  
 		  configs.add(config);
 		  return configs;
 		

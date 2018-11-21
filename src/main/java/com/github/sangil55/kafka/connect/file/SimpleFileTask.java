@@ -9,6 +9,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
@@ -17,6 +19,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -24,6 +27,7 @@ import javax.tools.JavaFileObject;
 
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.file.FileStreamSourceConnector;
+import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.apache.kafka.connect.source.SourceTask;
 import org.apache.commons.io.input.CountingInputStream;
@@ -42,10 +46,12 @@ public class SimpleFileTask extends SourceTask {
 	 private String filename;
 	 private String pathname="/data01/m_input";
 	 private int BUFFER_SIZE = 100000;
+	 private int ADD_BUFFER_SIZE = 1000;
 	 private String offsetpath="/tmp/";
 	 private String matchstr="*";
 	 private int SLEEP_TIME = 0;
 	 private int START_POS =0;
+	 private String selectdate;
 	 String offsetFileName = "kafka_csi_offset.csv";
 	 
 	  private InputStream stream;
@@ -66,6 +72,8 @@ public class SimpleFileTask extends SourceTask {
 	    	offsetpath = justGetOrAddSlash(props.get(SimpleFileConnector.OFFSETPATH_CONFIG));
 	    if(props.get(SimpleFileConnector.SLEEPTIME_CONFIG) != null)
 	    	SLEEP_TIME = Integer.parseInt(props.get(SimpleFileConnector.SLEEPTIME_CONFIG));
+	    if(props.get(SimpleFileConnector.SELECTDATE_CONFIG) != null)
+	    	selectdate = props.get(SimpleFileConnector.SELECTDATE_CONFIG);
 	   // pathname = "d:/getter/input.vol1";
     
 	    log.info(">Kafka Connector Task start ");
@@ -110,11 +118,11 @@ public class SimpleFileTask extends SourceTask {
 		// System.out.println("find additional offset start");
 		 int s;
 		 cin.skip(offset);
-		 byte[] b = new byte[1000];
-		 if ((s = cin.read(b, 0, 1000)) == -1)
+		 byte[] b = new byte[100000];
+		 if ((s = cin.read(b, 0, ADD_BUFFER_SIZE)) == -1)
 			 return 0;
 		 
-		 if(s<1000)
+		 if(s<ADD_BUFFER_SIZE)
 			 return s;
 		 
 		 String newstr = new String(b, "UTF-8");
@@ -122,28 +130,39 @@ public class SimpleFileTask extends SourceTask {
 		 while(true)
 		 {
 			// System.out.println("check for string : " + newstr);
-			 int lindex = newstr.indexOf('\n');
+			 int lindex = newstr.indexOf("\n[");
+			// System.out.println("str index is = " + lindex);
 			 if(lindex == -1)
 			 {
-				 return 1000 + findOffsetUntilNewLine(cin,1000);
+				 return ADD_BUFFER_SIZE + findOffsetUntilNewLine(cin,0);
 			 }
-			 if(lindex+1 == newstr.length())
-				 return 1000 + findOffsetUntilNewLine(cin,1000);
+			 else
+			 {
+			//	 System.out.println(newstr);
+		//		 System.out.println("byte index is = " +newstr.substring(0,lindex+1).getBytes("UTF-8").length);
+		//		 return lindex+1;				 
+				 if(lindex+1 ==newstr.substring(0,lindex+1).getBytes("UTF-8").length)
+					 return lindex+1;
+				 else
+					 return ADD_BUFFER_SIZE + findOffsetUntilNewLine(cin,0);  //if last line has a korean
+			 }
+		/*	 if(lindex+1 == newstr.length())
+				 return BUFFER_SIZE + findOffsetUntilNewLine(cin,BUFFER_SIZE);
 			 if(newstr.charAt(lindex+1) == '[')
 				 return sumidx+ lindex+1;
 			 
 			 if(lindex+2 == newstr.length() && newstr.charAt(lindex+1) == '\0')
-				 return sumidx + lindex+3;
+				 return BUFFER_SIZE + findOffsetUntilNewLine(cin,BUFFER_SIZE);
 			 else if(lindex+2 == newstr.length())
-				 return 1000 + findOffsetUntilNewLine(cin,1000);
+				 return BUFFER_SIZE + findOffsetUntilNewLine(cin,BUFFER_SIZE);
 			 if(newstr.charAt(lindex+1) == '\0' && newstr.charAt(lindex+2) == '\n')
-				 return sumidx+lindex+3;
+				 return BUFFER_SIZE + findOffsetUntilNewLine(cin,BUFFER_SIZE);
 			 else{
 				 //  0 12345
 				 //  \n[aaaa
 				 sumidx = sumidx + lindex+1;
 				 newstr = newstr.substring(lindex+1);
-			 }
+			 }*/
 		 }		 
 		 
 	 }
@@ -162,6 +181,19 @@ public class SimpleFileTask extends SourceTask {
             return matcher.group();
          }
          return "";
+	 }
+	 public String getToday()
+	 {
+		 DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyyMMdd");
+		LocalDate localDate = LocalDate.now();
+		System.out.println(dtf.format(localDate));
+		return dtf.format(localDate);
+	 }
+	 public String getMasHost(String str)
+	 {	
+		 //MAS04_20180726_005638.log
+		 int index = str.indexOf("_2");
+		 return str.substring(0, index);
 	 }
 
 	@Override
@@ -239,7 +271,7 @@ public class SimpleFileTask extends SourceTask {
 			}
 			
 			
-			for(int i = 0; i<MatchedFileList.size(); i++)
+			for(int i = 0; i<MatchedFileList.size()-1; i++)
 			{
 				//log.info("PROGRESS -- TOTAL FILE Counts :" +i+1 + "/" + MatchedFileList.size());
 				File thisfile = MatchedFileList.get(i);
@@ -275,9 +307,16 @@ public class SimpleFileTask extends SourceTask {
 						byte[] b = new byte[NEW_BUFFER_SIZE];
 						if ((s = cin.read(b, 0, NEW_BUFFER_SIZE)) != -1) {
 							String newstr = new String(b, "UTF-8");
-							String header = "<<HEADER>>date="+ getDate(thisfile.getName()) + "<</HEADER>>\n";
-													
-					        log.info("num of data bytes : " + s + "   ||  data : " /*+newstr*/);
+							String header ="";
+							if(selectdate.contains("local") || selectdate.contains("today"))
+							{
+								header ="<<HEADER>>{date:\""+ getToday() +"\",mas_host:\"" + getMasHost(thisfile.getName()) + "\"}<</HEADER>>\n";
+					    		 
+							}
+							else if(selectdate.contains("file"))
+								header = "<<HEADER>>{date:\""+ getDate(thisfile.getName()) +"\",mas_host:\"" + getMasHost(thisfile.getName()) + "\"}<</HEADER>>\n";
+						    					
+					        log.info("num of data bytes : " + s + "   ||  data : "/* +newstr*/);
 					       
 					        offset += s;
 					        if(newstr.charAt(0) == '\0' && newstr.charAt(1) == '\n')
@@ -287,15 +326,25 @@ public class SimpleFileTask extends SourceTask {
 					        		newstr.substring(2);
 					        }								        	
 					    
-					        Map sourceOffset = Collections.singletonMap("position", offset);
-					        Map sourcePartition = Collections.singletonMap("filename", filestr);
-					        String key = "";
-					        if(connectorkeyname.equals("FILE") || connectorkeyname.equals("file"))
-					        	 key = String.valueOf(i);
+					        Map sourceOffset = Collections.singletonMap("position", newstr.length() + header.length());
+					        Map sourcePartition = Collections.singletonMap(topic, topic);
+					        if(connectorkeyname.equals("null") || connectorkeyname.equals("NULL"))
+					        {
+					        	 results.add(new SourceRecord(sourcePartition, sourceOffset, topic, Schema.STRING_SCHEMA,  header + newstr));
+					        }
 					        else
-					        	key = connectorkeyname;
-					        results.add(new SourceRecord(sourcePartition, sourceOffset, topic,Schema.STRING_SCHEMA,key ,Schema.STRING_SCHEMA,  header + newstr));						      
-						 }
+					        {
+						        String key = "";
+						        if(connectorkeyname.equals("FILE") || connectorkeyname.equals("file"))
+						        	 key = String.valueOf(i);
+						        else if(connectorkeyname.equals("rand"))
+						        	key = String.valueOf(new Random().nextInt(1000));
+						        else					      
+						        	key = connectorkeyname;
+						        results.add(new SourceRecord(sourcePartition, sourceOffset, topic,Schema.STRING_SCHEMA,key ,Schema.STRING_SCHEMA,  header + newstr));
+						       
+					        }
+						}
 						Long[]ll = new Long[2];
 						ll[0] = offset; ll[1] = filelen;						
 						metadata.offsetmap.put(fileList[i].getName(),  ll);
@@ -358,20 +407,35 @@ public class SimpleFileTask extends SourceTask {
 							cin.skip(offset);
 							if ((s = cin.read(b, 0, NEW_BUFFER_SIZE)) != -1) {
 								String newstr = new String(b, "UTF-8");
-								String header = "<<Header>>date="+ getDate(fileList[i].getName()) + "<</HEADER>>\n";
-						        log.info("num of data bytes : " + s + "   ||  data : "/* +newstr */);
+								String header ="";
+								if(selectdate.contains("local") || selectdate.contains("today"))
+								{
+									header ="<<HEADER>>{date:\""+ getToday() +"\",mas_host:\"" + getMasHost(thisfile.getName()) + "\"}<</HEADER>>\n";
+						    		 
+								}
+								else if(selectdate.contains("file"))
+									header = "<<HEADER>>{date:\""+ getDate(thisfile.getName()) +"\",mas_host:\"" + getMasHost(thisfile.getName()) + "\"}<</HEADER>>\n";
+								log.info("num of data bytes : " + s + "   ||  data : "/* +newstr*/);
 						        offset += s;
 			        
-						        Map sourcePartition = Collections.singletonMap("filename", filestr);
-						        Map sourceOffset = Collections.singletonMap("position", offset);
-						        
-						        String key = "";
-						        if(connectorkeyname.equals("FILE") || connectorkeyname.equals("file"))
-						        	key = String.valueOf(i);
+						        Map sourceOffset = Collections.singletonMap("position", newstr.length() + header.length());
+						        Map sourcePartition = Collections.singletonMap(topic, topic);
+						        if(connectorkeyname.equals("null") || connectorkeyname.equals("NULL"))
+						        {
+						        	 results.add(new SourceRecord(sourcePartition, sourceOffset, topic, Schema.STRING_SCHEMA,  header + newstr));
+						        }
 						        else
-						        	key = connectorkeyname;
-						        results.add(new SourceRecord(sourcePartition, sourceOffset, topic,Schema.STRING_SCHEMA,key ,Schema.STRING_SCHEMA,  header + newstr));
-							 }
+							    {
+							        String key = "";
+							        if(connectorkeyname.equals("FILE") || connectorkeyname.equals("file"))
+							        	key = String.valueOf(i);
+							        else if(connectorkeyname.equals("rand"))
+							        	key = String.valueOf(new Random().nextInt(1000));
+							        else
+							        	key = connectorkeyname;
+							        results.add(new SourceRecord(sourcePartition, sourceOffset, topic,Schema.STRING_SCHEMA,key ,Schema.STRING_SCHEMA,  header + newstr));
+								}
+							}
 							Long[]ll = new Long[2];
 							ll[0] = offset; ll[1] = filelen;						
 							metadata.offsetmap.put(fileList[i].getName(), ll);
